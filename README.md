@@ -69,7 +69,7 @@ autocomplete/inline docs and real validation without a round-trip to the
 online docs:
 
 ```python
-from dakota.spec import DakotaStudy
+from dakota.spec.study import DakotaStudy
 import dakota.environment as dakenv
 
 study = DakotaStudy(
