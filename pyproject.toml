@@ -6,8 +6,10 @@ authors = [
     {name="Werner Van Geit"}
 ]
 readme = {file = "README.md", content-type = "text/markdown"}
-dependencies = ["numpy", "pydantic"]
-requires-python = ">=3.8"
+dependencies = ["numpy", "pydantic>=2"]
+# dakota.spec (Pydantic 2 models: ConfigDict/model_validator/field_validator,
+# PEP 604 `X | None` unions evaluated at runtime) requires Python 3.10+.
+requires-python = ">=3.10"
 dynamic = ["version"]
 
 [project.urls]

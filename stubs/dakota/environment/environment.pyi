@@ -1,11 +1,18 @@
 from __future__ import annotations
 import numpy
+import numpy.typing
 import typing
 __all__: list[str] = ['CommandLine', 'Response', 'Variables', 'build_info', 'get_response_fn_val', 'get_variable_values', 'get_variable_values_np', 'print_version', 'revision', 'study', 'version']
-DakotaCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]
+DakotaEvaluatorCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]
 """Per-evaluation analysis-driver callback: receives a params dict (variable
 values/labels/ASV, either as numpy arrays or lists depending on the
 `numpy` interface option) and must return a response dict."""
+DakotaBatchCallback = typing.Callable[[list[dict[str, typing.Any]]], typing.Iterable[dict[str, typing.Any]]]
+"""Batch analysis-driver callback (used with `interface.concurrency.batch`):
+receives a list of per-evaluation params dicts and must return/yield one
+response dict per input, in the same order."""
+DakotaCallback = typing.Union[DakotaEvaluatorCallback, DakotaBatchCallback]
+"""Either callback shape accepted by `study(callback=...)` / `callbacks={...}`."""
 class CommandLine:
     def __init__(self, arg0: str) -> None:
         ...
@@ -56,7 +63,7 @@ def get_variable_values(arg0: study) -> list[float]:
     """
     Get active continuous Variable values
     """
-def get_variable_values_np(arg0: study) -> numpy.ndarray[numpy.float64]:
+def get_variable_values_np(arg0: study) -> numpy.typing.NDArray[numpy.float64]:
     """
     Get active continuous Variable values
     """

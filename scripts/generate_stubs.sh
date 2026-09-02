@@ -43,10 +43,12 @@ sed -i 's/: json)/: typing.Any)/g' "$STUBS_DIR/environment.pyi"
 
 # pybind11-stubgen can't see through the py::object/py::dict C++ params to
 # the actual callable contract (traced via Pybind11Interface::derived_map_ac:
-# a callback is invoked as callback(kwargs) -> dict, and `callbacks` is
-# dict[str, <that same callable>] keyed by analysis-driver id). Replace the
-# untyped `callback: typing.Any` / bare `callbacks: dict` with a proper
-# Callable alias instead of leaving them as Any / an unparameterized dict.
+# a per-evaluation callback is invoked as callback(kwargs) -> dict; a batch
+# callback (interface.concurrency.batch) is invoked as
+# callback(list[kwargs]) -> Iterable[dict]; `callbacks` is dict[str, <either
+# callback shape>] keyed by analysis-driver id). Replace the untyped
+# `callback: typing.Any` / bare `callbacks: dict` with a proper Callable
+# alias instead of leaving them as Any / an unparameterized dict.
 "$STUBS_VENV/bin/python" - "$STUBS_DIR/environment.pyi" <<'PYEOF'
 import re, sys
 
@@ -54,10 +56,16 @@ path = sys.argv[1]
 text = open(path).read()
 
 alias = (
-    "DakotaCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]\n"
+    "DakotaEvaluatorCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]\n"
     '"""Per-evaluation analysis-driver callback: receives a params dict (variable\n'
     "values/labels/ASV, either as numpy arrays or lists depending on the\n"
     '`numpy` interface option) and must return a response dict."""\n'
+    "DakotaBatchCallback = typing.Callable[[list[dict[str, typing.Any]]], typing.Iterable[dict[str, typing.Any]]]\n"
+    '"""Batch analysis-driver callback (used with `interface.concurrency.batch`):\n'
+    "receives a list of per-evaluation params dicts and must return/yield one\n"
+    'response dict per input, in the same order."""\n'
+    "DakotaCallback = typing.Union[DakotaEvaluatorCallback, DakotaBatchCallback]\n"
+    '"""Either callback shape accepted by `study(callback=...)` / `callbacks={...}`."""\n'
 )
 marker = "__all__: list[str] = "
 idx = text.index(marker)
@@ -66,6 +74,12 @@ text = text[:line_end] + alias + text[line_end:]
 
 text = text.replace("callback: typing.Any", "callback: DakotaCallback")
 text = re.sub(r"callbacks: dict(?!\[)", "callbacks: dict[str, DakotaCallback]", text)
+
+# pybind11-stubgen emits `numpy.ndarray[numpy.float64]`, but numpy.ndarray's
+# single type-parameter is the shape, not the dtype (a type checker reports
+# this as invalid). Use the correctly-parameterized numpy.typing.NDArray.
+text = text.replace("import numpy\n", "import numpy\nimport numpy.typing\n", 1)
+text = text.replace("numpy.ndarray[numpy.float64]", "numpy.typing.NDArray[numpy.float64]")
 
 open(path, "w").write(text)
 PYEOF

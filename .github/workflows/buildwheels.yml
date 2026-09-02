@@ -202,7 +202,7 @@ jobs:
           # already present from a prior run, e.g. cached test runners
           # or local `act` runs).
           pip install --force-reinstall --no-deps ./wheelhouse/itis_dakota*.whl
-          pip install numpy
+          pip install numpy pydantic
           pytest
       - name: Check stubs are up to date
         # Gated to one matrix leg: dakota.environment is already built and
@@ -218,16 +218,23 @@ jobs:
           sed -i 's/: json)/: typing.Any)/g' /tmp/stub_check/dakota/environment/environment.pyi
           # Same normalization as scripts/generate_stubs.sh: give the
           # analysis-driver callback params a real Callable type instead of
-          # Any / a bare dict.
+          # Any / a bare dict, and fix the invalid single-arg numpy.ndarray
+          # annotation.
           python3 - /tmp/stub_check/dakota/environment/environment.pyi <<'PYEOF'
           import re, sys
           path = sys.argv[1]
           text = open(path).read()
           alias = (
-              "DakotaCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]\n"
+              "DakotaEvaluatorCallback = typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]\n"
               '"""Per-evaluation analysis-driver callback: receives a params dict (variable\n'
               "values/labels/ASV, either as numpy arrays or lists depending on the\n"
               '`numpy` interface option) and must return a response dict."""\n'
+              "DakotaBatchCallback = typing.Callable[[list[dict[str, typing.Any]]], typing.Iterable[dict[str, typing.Any]]]\n"
+              '"""Batch analysis-driver callback (used with `interface.concurrency.batch`):\n'
+              "receives a list of per-evaluation params dicts and must return/yield one\n"
+              'response dict per input, in the same order."""\n'
+              "DakotaCallback = typing.Union[DakotaEvaluatorCallback, DakotaBatchCallback]\n"
+              '"""Either callback shape accepted by `study(callback=...)` / `callbacks={...}`."""\n'
           )
           marker = "__all__: list[str] = "
           idx = text.index(marker)
@@ -235,6 +242,8 @@ jobs:
           text = text[:line_end] + alias + text[line_end:]
           text = text.replace("callback: typing.Any", "callback: DakotaCallback")
           text = re.sub(r"callbacks: dict(?!\[)", "callbacks: dict[str, DakotaCallback]", text)
+          text = text.replace("import numpy\n", "import numpy\nimport numpy.typing\n", 1)
+          text = text.replace("numpy.ndarray[numpy.float64]", "numpy.typing.NDArray[numpy.float64]")
           open(path, "w").write(text)
           PYEOF
           for f in __init__.pyi environment.pyi; do
@@ -451,7 +460,7 @@ jobs:
           # installed (otherwise pip skips when the same version is
           # already present from a prior run).
           pip install --force-reinstall --no-deps ./wheelhouse/itis_dakota*${{ matrix.test-cp }}*.whl
-          pip install numpy
+          pip install numpy pydantic
           pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v7
@@ -496,7 +505,7 @@ jobs:
         run: |
           pip install pytest
           pip install --force-reinstall --no-deps wheelhouse/*cp314*.whl
-          pip install numpy
+          pip install numpy pydantic
           pytest
 
   release:
